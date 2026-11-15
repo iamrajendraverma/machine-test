@@ -1,4 +1,6 @@
 from datetime import date
+import json
+
 
 def remove_duplicates(chunks):
     seen = set()
@@ -53,7 +55,7 @@ def detect_conflicts(chunks):
     conflicts = []
 
     grouped_chunks = {}
-
+# creating the map of each document
     for chunk in chunks:
         document_id = chunk["document_id"]
 
@@ -62,7 +64,9 @@ def detect_conflicts(chunks):
     for document_id, document_chunks in grouped_chunks.items():
 
         for i in range(len(document_chunks)):
+            print("inside i")
             for j in range(i + 1, len(document_chunks)):
+                print("inside j")
 
                 content_1 = document_chunks[i]["content"].lower()
                 content_2 = document_chunks[j]["content"].lower()
