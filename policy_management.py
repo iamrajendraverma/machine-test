@@ -85,7 +85,9 @@ def _polarity(tokens):
         return "permissive"
     return None
 
-
+#  This function checks two things:
+# - Do both statements talk about the same subject?
+# - Do they have opposite meanings according to the polarity rules?
 def _contradicts(text_a, text_b):
     tokens_a, tokens_b = _tokens(text_a), _tokens(text_b)
 
