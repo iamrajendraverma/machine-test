@@ -1,4 +1,6 @@
 from datetime import date
+import re
+
 
 def remove_duplicates(chunks):
     seen = set()
@@ -49,32 +51,72 @@ def rank_chunks(chunks):
         key=lambda chunk: chunk["similarity_score"],
         reverse=True
     )
+STOPWORDS = {
+    "a", "an", "the", "are", "is", "be", "must", "with", "without", "up",
+    "to", "above", "below", "within", "by", "for", "of", "on", "in", "and",
+    "or", "at", "than",
+}
+PERMISSIVE_WORDS = {"allowed", "permitted", "approved", "always"}
+RESTRICTIVE_WORDS = {"not", "prohibited", "require", "requires", "required"}
+MIN_SHARED_SUBJECT_TOKENS = 2
+
+
+def _tokens(text):
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def _subject_tokens(tokens):
+    # Words that say what the statement is about (e.g. "cash withdrawals
+    # abroad"), without filler, polarity words or numbers.
+    return {
+        token for token in tokens
+        if token not in STOPWORDS
+        and token not in PERMISSIVE_WORDS
+        and token not in RESTRICTIVE_WORDS
+        and not token.isdigit()
+    }
+
+
+def _polarity(tokens):
+    token_set = set(tokens)
+    if token_set & RESTRICTIVE_WORDS:
+        return "restrictive"
+    if token_set & PERMISSIVE_WORDS:
+        return "permissive"
+    return None
+
+
+def _contradicts(text_a, text_b):
+    tokens_a, tokens_b = _tokens(text_a), _tokens(text_b)
+
+    shared_subject = _subject_tokens(tokens_a) & _subject_tokens(tokens_b)
+    if len(shared_subject) < MIN_SHARED_SUBJECT_TOKENS:
+        return False
+
+    polarity_a, polarity_b = _polarity(tokens_a), _polarity(tokens_b)
+    return (
+        polarity_a is not None
+        and polarity_b is not None
+        and polarity_a != polarity_b
+    )
+
+
 def detect_conflicts(chunks):
     conflicts = []
 
-    grouped_chunks = {}
+    for i in range(len(chunks)):
+        for j in range(i + 1, len(chunks)):
+            chunk_1, chunk_2 = chunks[i], chunks[j]
 
-    for chunk in chunks:
-        document_id = chunk["document_id"]
-
-        grouped_chunks.setdefault(document_id, []).append(chunk)
-
-    for document_id, document_chunks in grouped_chunks.items():
-
-        for i in range(len(document_chunks)):
-            for j in range(i + 1, len(document_chunks)):
-
-                content_1 = document_chunks[i]["content"].lower()
-                content_2 = document_chunks[j]["content"].lower()
-
-                if content_1 != content_2:
-                    conflicts.append({
-                        "document_id": document_id,
-                        "statement_1": content_1,
-                        "statement_2": content_2,
-                        "source_1": document_chunks[i]["source"],
-                        "source_2": document_chunks[j]["source"]
-                    })
+            if _contradicts(chunk_1["content"], chunk_2["content"]):
+                conflicts.append({
+                    "document_id_1": chunk_1["document_id"],
+                    "document_id_2": chunk_2["document_id"],
+                    "statement_1": chunk_1["content"],
+                    "statement_2": chunk_2["content"],
+                    "source_1": chunk_1["source"],
+                    "source_2": chunk_2["source"]
+                })
 
     return conflicts
 def get_top_evidence(chunks, top_n=3):
