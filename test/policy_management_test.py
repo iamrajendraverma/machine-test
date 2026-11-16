@@ -6,8 +6,8 @@ from datetime import date
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from sample import chunks  # noqa: E402
-from solutions import (  # noqa: E402
+from policy_data import chunks  # noqa: E402
+from policy_management import (  # noqa: E402
     detect_conflicts,
     filter_effective_chunks,
     get_top_evidence,
@@ -43,7 +43,7 @@ class RemoveDuplicatesTest(unittest.TestCase):
         self.assertEqual(len(result), len(chunks) - 1)
         self.assertEqual(len(keys(result)), len(set(keys(result))))
 
-    def test_only_one_copy_of_poL001_C1_remains(self):
+    def test_only_one_copy_of_POL001_C1_remains(self):
         result = remove_duplicates(chunks)
         matches = [c for c in result if c["document_id"] == "POL001" and c["chunk_id"] == "C1"]
         self.assertEqual(len(matches), 1)

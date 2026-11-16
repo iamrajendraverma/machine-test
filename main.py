@@ -1,7 +1,7 @@
-from solutions import rank_chunks
-from solutions import retain_latest_policy_version
-from solutions import remove_duplicates, filter_effective_chunks,detect_conflicts,get_top_evidence
-from sample import chunks
+from policy_management import rank_chunks
+from policy_management import retain_latest_policy_version
+from policy_management import remove_duplicates, filter_effective_chunks,detect_conflicts,get_top_evidence
+from policy_data import policy_data
 from datetime import date
 import json
 
@@ -10,9 +10,10 @@ import json
 def main():
     EVALUATION_DATE = date(2026, 11, 14)
 
-    result =retrieve_evidence(chunks,EVALUATION_DATE)
+    result =retrieve_evidence(policy_data,EVALUATION_DATE)
     
     print(json.dumps(result, indent=4))
+    
 
     
 
