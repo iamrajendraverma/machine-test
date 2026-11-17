@@ -14,11 +14,26 @@ A simple and reusable Python project setup for practicing coding challenges, AI/
 ```text
 machine-test/
 │
-├── main.py                  # Application entry point
-├── solution.py              # Coding problem solutions
+├── main.py                  # Application entry point (runs the medical query demo)
 │
-├── tests/
-│   └── test_solution.py     # Unit test cases
+├── rag/                     # Evidence-retrieval pipelines
+│   ├── common.py            # Shared helpers: dedupe, rank by similarity, top-k
+│   ├── policy/
+│   │   ├── data.py          # Sample policy chunks
+│   │   ├── filters.py       # Dedupe, effective-date and latest-version filters
+│   │   ├── conflicts.py     # Heuristic contradiction detection
+│   │   └── pipeline.py      # retrieve_evidence(chunks, evaluation_date)
+│   └── medical/
+│       ├── data.py          # Sample patient record chunks
+│       ├── filters.py       # Patient, authorisation, date and doc-type filters
+│       ├── query.py         # decompose_query: free text -> sub-queries
+│       └── pipeline.py      # medical_result(query, records, evaluation_date)
+│
+├── tests/                   # pytest suite, mirrors the rag/ layout
+│   ├── helpers.py           # Chunk factories
+│   ├── test_common.py
+│   ├── policy/              # filters, conflicts, pipeline tests
+│   └── medical/             # filters, query, pipeline tests
 │
 ├── pyproject.toml           # Project configuration
 ├── uv.lock                  # Dependency lock file
