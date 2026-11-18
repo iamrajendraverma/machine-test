@@ -290,3 +290,284 @@ The example is illustrative, not a hardcoded answer. Your code must implement al
 - Understanding of RAG security, evaluation, and production architecture
 
 **Healthcare safety note:** This exercise is about retrieval and evidence handling, not diagnosis or treatment recommendations. A production system must enforce authorization server-side, protect PHI throughout the pipeline, and require clinician judgment for medical decisions.
+
+
+---
+
+# 3. Machine Test 1: LangGraph – Healthcare Multi-Agent System
+
+**Difficulty:** Senior  
+**Round:** Python live coding + Senior AI/ML Engineer / Agentic AI Engineer interview  
+**Stack:** Python, LangGraph, TypedDict, LLM/tool integrations
+
+## Problem statement
+
+A healthcare organization wants to build an AI-powered Patient Assistance System using LangGraph. The system helps authorized doctors retrieve information from patient medical records, analyze the retrieved evidence, validate the results, and generate a grounded response.
+
+A doctor may ask:
+
+> Find the latest HbA1c result for patient P001, check their diabetes medication, and summarize their health condition.
+
+The system must understand the request, break it into smaller tasks, route each task to the appropriate specialist agent, collect the results, validate the evidence, and prepare a final response. It must not expose records belonging to another patient or invent information that is not present in the retrieved records.
+
+## Required agents / graph nodes
+
+| Agent / node | Responsibility |
+| --- | --- |
+| Query Agent | Understand the original request, extract the patient ID, and decompose the request into structured subqueries |
+| Lab Agent | Retrieve relevant laboratory reports, including HbA1c results |
+| Medication Agent | Retrieve medication and prescription information |
+| Analysis Agent | Analyze the retrieved information and organize relevant findings |
+| Validation Agent | Check evidence completeness, relevance, consistency, and provenance |
+| Response Agent | Generate a concise, evidence-based response for the doctor |
+
+You may implement each agent as a LangGraph node. The agents can call deterministic Python functions or mock tools for this machine test; an actual LLM integration is optional unless requested by the interviewer.
+
+## Functional requirements
+
+Implement a LangGraph workflow that:
+
+1. Accepts the doctor's natural-language query.
+2. Extracts the patient ID and decomposes the request into one or more structured subqueries.
+3. Routes laboratory-related subqueries to the Lab Agent.
+4. Routes medication-related subqueries to the Medication Agent.
+5. Executes independent retrieval agents in parallel where appropriate.
+6. Collects the results from all agents in shared graph state.
+7. Combines the retrieved records into an evidence collection with source provenance.
+8. Sends the evidence to the Validation Agent.
+9. If validation succeeds, routes to the Response Agent.
+10. If evidence is missing or invalid, attempts additional retrieval when appropriate, or returns an explicit insufficient-evidence response.
+11. Returns the final response with the patient ID, findings, supporting evidence, and warnings.
+
+## Shared state
+
+Define a shared state using `TypedDict`. Include at least the following fields; you may add fields that are useful for routing, error handling, and auditability.
+
+```python
+from typing import TypedDict, Any
+
+class AgentState(TypedDict, total=False):
+    original_query: str
+    patient_id: str
+    sub_queries: list[dict[str, Any]]
+    lab_results: list[dict[str, Any]]
+    medication_results: list[dict[str, Any]]
+    evidence: list[dict[str, Any]]
+    validation_status: str
+    validation_errors: list[str]
+    retry_count: int
+    final_response: str
+    warnings: list[str]
+```
+
+For parallel branches, define appropriate state reducers or use another safe merge strategy so that concurrent node updates do not overwrite one another.
+
+## Coding tasks
+
+### Task 1 — Define the state
+
+Create the `AgentState` schema using `TypedDict`. Decide which fields are required and which are optional. Include any additional fields needed to track errors, retries, and evidence provenance.
+
+### Task 2 — Implement the agent nodes
+
+Implement functions with signatures similar to the following:
+
+```python
+def query_agent(state: AgentState) -> dict:
+    ...
+
+def lab_agent(state: AgentState) -> dict:
+    ...
+
+def medication_agent(state: AgentState) -> dict:
+    ...
+
+def analysis_agent(state: AgentState) -> dict:
+    ...
+
+def validation_agent(state: AgentState) -> dict:
+    ...
+
+def response_agent(state: AgentState) -> dict:
+    ...
+```
+
+Each node should read from the shared state and return only the state updates it owns. Use mock retrieval data if no database or vector store is available.
+
+### Task 3 — Build the LangGraph workflow
+
+Use the following LangGraph building blocks:
+
+- `StateGraph`
+- `START`
+- `END`
+- `add_node()`
+- `add_edge()`
+- `add_conditional_edges()`
+- `compile()`
+- `invoke()`
+
+Register all nodes and connect them to form the workflow.
+
+### Task 4 — Implement conditional routing
+
+Create routing logic that determines which retrieval agents should run based on the decomposed subqueries.
+
+Examples:
+
+- A query asking for HbA1c should route to the Lab Agent.
+- A query asking about diabetes medication should route to the Medication Agent.
+- A query asking for both should execute both retrieval branches.
+- A query that does not require either source should not invoke unrelated retrieval agents.
+
+### Task 5 — Implement evidence preparation
+
+Combine the results from the retrieval agents into a consistent evidence structure. Each evidence item should retain relevant provenance, such as:
+
+- patient ID
+- document ID
+- chunk ID
+- document type
+- record date
+- source document
+- retrieved content
+
+Do not discard provenance when combining agent outputs.
+
+### Task 6 — Validate and handle failures
+
+The Validation Agent should check that:
+
+- Evidence belongs to the requested patient.
+- Retrieved records are authorized for the requesting doctor.
+- Evidence is relevant to the requested subquery.
+- Required evidence is present.
+- Conflicting or incomplete information is identified.
+
+Use conditional routing after validation. If validation fails, either retry the relevant retrieval branch with a bounded retry count or return a clear insufficient-evidence response. Avoid infinite loops.
+
+### Task 7 — Generate the response
+
+The Response Agent should use only validated evidence. It should distinguish between facts found in records and information that is unavailable. Include warnings for missing or conflicting evidence. Do not generate a diagnosis or treatment recommendation unsupported by the records.
+
+### Task 8 — Compile and run
+
+Compile the graph and invoke it with a sample input:
+
+```python
+initial_state = {
+    "original_query": (
+        "Find the latest HbA1c result for patient P001, "
+        "check their diabetes medication, and summarize "
+        "their health condition."
+    ),
+    "patient_id": "P001",
+    "retry_count": 0,
+    "warnings": [],
+}
+
+result = graph.invoke(initial_state)
+print(result["final_response"])
+```
+
+Adapt the invocation to your completed state schema.
+
+## Expected workflow
+
+```text
+START
+  |
+Query Agent
+  |
+Conditional routing
+  |--------------------------|
+  v                          v
+Lab Agent              Medication Agent
+  |                          |
+  |---------- merge ---------|
+             |
+       Analysis Agent
+             |
+      Validation Agent
+             |
+       Conditional route
+        /          \
+  Valid evidence   Invalid / incomplete
+       |                 |
+       v           Retry retrieval
+ Response Agent          |
+       |            Retry limit reached
+       v                 |
+      END <--------------+
+```
+
+The Lab Agent and Medication Agent should run in parallel when both are needed. The graph must merge their state updates before analysis.
+
+## Sample test cases
+
+1. **Combined query:** Ask for the latest HbA1c and current diabetes medication. Both retrieval agents should run.
+2. **Lab-only query:** Ask for the latest HbA1c result. Only the Lab Agent should run.
+3. **Medication-only query:** Ask which diabetes medication was prescribed. Only the Medication Agent should run.
+4. **Missing evidence:** The requested lab report does not exist. The system should return an explicit warning rather than inventing a value.
+5. **Unauthorized record:** A retrieval tool returns a record for another patient or an unauthorized record. It must not reach the final response.
+6. **Conflicting evidence:** Two relevant records contain inconsistent values. The system should flag the conflict and preserve provenance.
+7. **Transient retrieval failure:** One agent encounters a temporary error. The workflow should retry within a configured limit or continue safely with clearly marked partial results where appropriate.
+8. **Retry exhaustion:** Retrieval continues to fail. The graph should terminate with a structured error or insufficient-evidence response.
+
+## Expected output structure
+
+The exact wording may vary, but the result should contain the patient identifier, findings, evidence, validation status, and warnings. For example:
+
+```json
+{
+  "patient_id": "P001",
+  "validation_status": "valid",
+  "findings": {
+    "latest_hba1c": "7.2%",
+    "medications": ["Metformin 500 mg"]
+  },
+  "evidence": [
+    {
+      "document_id": "DOC102",
+      "document_type": "lab_report",
+      "record_date": "2026-06-15",
+      "source": "lab_june.pdf",
+      "content": "Patient HbA1c level is 7.2%."
+    }
+  ],
+  "warnings": [],
+  "final_response": "The latest available HbA1c result is 7.2% ..."
+}
+```
+
+This is an illustrative output shape, not a hardcoded answer. Your implementation must retrieve and validate the data before producing the response.
+
+## Interview follow-up questions
+
+1. What is the role of shared state in LangGraph?
+2. What is the difference between a node, an edge, and a conditional edge?
+3. How would you execute the Lab Agent and Medication Agent in parallel?
+4. How do you merge state updates from parallel nodes without overwriting data?
+5. What is a reducer in LangGraph, and when would you use one?
+6. How would you implement retry logic without creating an infinite graph loop?
+7. What is the difference between a supervisor architecture and a fixed LangGraph workflow?
+8. How would you persist graph state and resume an interrupted workflow?
+9. How would you implement human approval before a sensitive action?
+10. How would you handle partial results when one agent fails but another succeeds?
+11. How would you trace agent execution and debug incorrect routing?
+12. How would you protect PHI and enforce patient-level authorization across all agents?
+
+## Evaluation criteria
+
+| Area | What will be evaluated |
+| --- | --- |
+| Python implementation | Correctness, readability, typing, modular node functions |
+| LangGraph fundamentals | StateGraph, nodes, edges, conditional routing, compile, invoke |
+| State management | Correct state updates, reducers, safe parallel merging |
+| Agent orchestration | Clear responsibilities, routing, parallel execution, coordination |
+| Evidence handling | Provenance, relevance, authorization, conflict detection |
+| Reliability | Bounded retries, partial failures, graceful fallback |
+| Testing | Happy path, missing data, unauthorized data, conflicts, failure cases |
+| Production readiness | Checkpointing, observability, auditability, PHI protection |
+
+**Healthcare safety note:** This exercise focuses on retrieval, orchestration, and evidence handling. A production system must enforce authorization server-side, protect PHI throughout the pipeline, audit record access, and keep clinical decisions under qualified clinician control.
